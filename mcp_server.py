@@ -1,4 +1,4 @@
-from mcp.server.fastmcp import FastMCP, Context
+from fastmcp import FastMCP, Context
 import requests
 import json
 import logging
@@ -11,9 +11,9 @@ mcp = FastMCP("APSpace")
 # Tools
 @mcp.tool()
 def get_student_timetable(intake_code: str) -> str:
-    """Retrieves the weekly timetable for a specific intake code."""
-    
-    timetable_url = "https://s3-ap-southeast-1.amazonaws.com/open-ws/weektimetable"
+    """Tool to Retrieve the weekly timetable for specific intake code"""
+
+    STUDENTS_TIMETABLE_URL = "https://s3-ap-southeast-1.amazonaws.com/open-ws/weektimetable"
 
     try:
         response = requests.get(timetable_url)
@@ -32,10 +32,9 @@ def get_student_timetable(intake_code: str) -> str:
         if not filtered_timetable:
             return f"No classes found for intake: {intake_code}."
 
-        # Format the filtered timetable
-        formatted_schedule = []
+        formated_timetable = []
         for module in filtered_timetable:
-            formatted_schedule.append(
+            formated_timetable.append(
                 {
                     "module": module.get("MODID"),
                     "group": module.get("GROUPING"),
@@ -44,11 +43,12 @@ def get_student_timetable(intake_code: str) -> str:
                     "from": module.get("TIME_FROM"),
                     "to": module.get("TIME_TO"),
                     "location": module.get("LOCATION"),
-                    "lecturer": module.get("SAMACCOUNTNAME")
+                    "room": module.get("ROOM"),
+                    "lecturer": module.get("NAME")
                 }
             )
-        
-        return json.dumps(formatted_schedule[:20]) 
+
+        return json.dumps(formated_timetable[:20])  # change the size of the list
 
     except Exception as e:
         logging.error('Error fetching timetable: {str(e)}')
