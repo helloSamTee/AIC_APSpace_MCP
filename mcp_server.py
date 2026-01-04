@@ -1,7 +1,9 @@
 from mcp.server.fastmcp import FastMCP, Context
 import requests
 import json
+import logging
 from attendance import brute_force_attendance
+logging.basicConfig(level=logging.INFO)
 
 # Server intialization
 mcp = FastMCP("APSpace")
@@ -15,8 +17,11 @@ def get_student_timetable(intake_code: str) -> str:
 
     try:
         response = requests.get(timetable_url)
+        logging.info('GET request to fetch student timetable')
+        
         response.raise_for_status()
         all_timetable = response.json()
+        logging.info('Timetable retrieved successfully')
 
         # filter the timetable
         filtered_timetable = [
@@ -46,8 +51,12 @@ def get_student_timetable(intake_code: str) -> str:
         return json.dumps(formatted_schedule[:20]) 
 
     except Exception as e:
+        logging.error('Error fetching timetable: {str(e)}')
+        
         return f"Error fetching timetable: {str(e)}"
+    
 
+    
 @mcp.tool()
 async def sign_attendance(jwt_token: str, ctx: Context) -> str:
     """
@@ -141,6 +150,9 @@ def get_my_attendance(jwt_token: str, intake: str):
     return response.json()
 
 
-
 if __name__ == "__main__":
-    mcp.run(transport="sse", host="0.0.0.0", port=8000, path="/mcp")
+    mcp.run(
+        transport="sse",
+        host="localhost",
+        port=3333
+    )
