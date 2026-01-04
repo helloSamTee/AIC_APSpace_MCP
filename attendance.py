@@ -3,7 +3,7 @@ import httpx
 import os
 import json
 from dotenv import load_dotenv
-from mcp.server.fastmcp import Context
+from fastmcp import Context
 
 # Load environment variables
 load_dotenv()
