@@ -1,4 +1,4 @@
-from mcp.server.fastmcp import FastMCP, Context
+from fastmcp import FastMCP, Context
 import requests
 import json
 from attendance import brute_force_attendance
@@ -88,58 +88,6 @@ def get_ap_card_balance(jwt_token: str):
 
     response = requests.get(url, headers=headers)
     return response.json()
-
-@mcp.tool()
-def get_my_courses(jwt_token: str):
-    """
-    Fetches all courses the student is enrolled in.
-    Args:
-        jwt_token: The student's Bearer JWT from APSpace.
-    """
-    if not jwt_token:
-        return "Missing jwt_token."
-
-    url = "https://api.apiit.edu.my/student/courses"
-    headers = {"Authorization": f"Bearer {jwt_token}"}
-
-    response = requests.get(url, headers=headers, timeout=15)
-
-    if response.status_code == 401:
-        return "401 Unauthorized: JWT invalid or expired."
-    if response.status_code == 403:
-        return "403 Forbidden: Access denied."
-
-    response.raise_for_status()
-    return response.json()
-
-
-@mcp.tool()
-def get_my_attendance(jwt_token: str, intake: str):
-    """
-    Fetches attendance records for a given intake.
-    Args:
-        jwt_token: The student's Bearer JWT from APSpace.
-        intake: Intake code (e.g. APU2F2506CS(AI))
-    """
-    if not jwt_token:
-        return "Missing jwt_token."
-    if not intake:
-        return "Missing intake."
-
-    url = "https://api.apiit.edu.my/student/attendance"
-    headers = {"Authorization": f"Bearer {jwt_token}"}
-    params = {"intake": intake}
-
-    response = requests.get(url, headers=headers, params=params, timeout=15)
-
-    if response.status_code == 401:
-        return "401 Unauthorized: JWT invalid or expired."
-    if response.status_code == 403:
-        return "403 Forbidden: Access denied."
-
-    response.raise_for_status()
-    return response.json()
-
 
 
 if __name__ == "__main__":
