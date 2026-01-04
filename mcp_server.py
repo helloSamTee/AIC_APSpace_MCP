@@ -1,6 +1,7 @@
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP, Context
 import requests
 import json
+from attendance import brute_force_attendance
 
 # Server intialization
 mcp = FastMCP("APSpace")
@@ -47,5 +48,10 @@ def get_student_timetable(intake_code: str) -> str:
     except Exception as e:
         return f"Error fetching timetable: {str(e)}"
 
+@mcp.tool()
+async def sign_attendance(jwt_token: str, ctx: Context) -> str:
+    """Signs attendance by automatically finding the correct 3-digit OTP."""
+    return await brute_force_attendance(jwt_token, ctx)
+
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="sse", host="0.0.0.0", port=8000, path="/mcp")
