@@ -9,28 +9,22 @@ mcp = FastMCP("APSpace")
 # Tools
 @mcp.tool()
 def get_student_timetable(intake_code: str) -> str:
-    """Retrieves the weekly timetable for a specific intake code."""
-    
-    timetable_url = "https://s3-ap-southeast-1.amazonaws.com/open-ws/weektimetable"
+    """Tool to Retrieve the weekly timetable for specific intake code"""
+
+    STUDENTS_TIMETABLE_URL = "https://s3-ap-southeast-1.amazonaws.com/open-ws/weektimetable"
 
     try:
-        response = requests.get(timetable_url)
-        response.raise_for_status()
-        all_timetable = response.json()
+        response = requests.get(STUDENTS_TIMETABLE_URL)
 
-        # filter the timetable
-        filtered_timetable = [
-            x for x in all_timetable 
-            if x.get("INTAKE_CODE") == intake_code
-        ]
+        all_timetable = response.json()  # returns json inside list
+        filtered_timetable = [intake for intake in all_timetable if intake.get("INTAKE") == intake_code]
 
         if not filtered_timetable:
             return f"No classes found for intake: {intake_code}."
 
-        # Format the filtered timetable
-        formatted_schedule = []
+        formated_timetable = []
         for module in filtered_timetable:
-            formatted_schedule.append(
+            formated_timetable.append(
                 {
                     "module": module.get("MODID"),
                     "group": module.get("GROUPING"),
@@ -39,14 +33,16 @@ def get_student_timetable(intake_code: str) -> str:
                     "from": module.get("TIME_FROM"),
                     "to": module.get("TIME_TO"),
                     "location": module.get("LOCATION"),
-                    "lecturer": module.get("SAMACCOUNTNAME")
+                    "room": module.get("ROOM"),
+                    "lecturer": module.get("NAME")
                 }
             )
-        
-        return json.dumps(formatted_schedule[:20]) 
+
+        return json.dumps(formated_timetable[:20])  # change the size of the list
 
     except Exception as e:
-        return f"Error fetching timetable: {str(e)}"
+        return f"Error fetching timetable. {e}"
+
 
 @mcp.tool()
 async def sign_attendance(jwt_token: str, ctx: Context) -> str:
