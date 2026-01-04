@@ -1,6 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 import requests
 import json
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 # Server intialization
 mcp = FastMCP("APSpace")
@@ -14,8 +17,11 @@ def get_student_timetable(intake_code: str) -> str:
 
     try:
         response = requests.get(timetable_url)
+        logging.info('GET request to fetch student timetable')
+        
         response.raise_for_status()
         all_timetable = response.json()
+        logging.info('Timetable retrieved successfully')
 
         # filter the timetable
         filtered_timetable = [
@@ -45,7 +51,13 @@ def get_student_timetable(intake_code: str) -> str:
         return json.dumps(formatted_schedule[:20]) 
 
     except Exception as e:
+        logging.error('Error fetching timetable: {str(e)}')
+        
         return f"Error fetching timetable: {str(e)}"
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(
+        transport="sse",
+        host="localhost",
+        port=3333
+    )
