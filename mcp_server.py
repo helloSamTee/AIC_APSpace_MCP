@@ -1,4 +1,4 @@
-from fastmcp import FastMCP, Context
+from mcp.server.fastmcp import FastMCP, Context
 import requests
 import json
 import logging
@@ -16,7 +16,7 @@ def get_student_timetable(intake_code: str) -> str:
     STUDENTS_TIMETABLE_URL = "https://s3-ap-southeast-1.amazonaws.com/open-ws/weektimetable"
 
     try:
-        response = requests.get(timetable_url)
+        response = requests.get(STUDENTS_TIMETABLE_URL)
         logging.info('GET request to fetch student timetable')
         
         response.raise_for_status()
