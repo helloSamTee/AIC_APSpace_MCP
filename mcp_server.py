@@ -47,5 +47,38 @@ def get_student_timetable(intake_code: str) -> str:
     except Exception as e:
         return f"Error fetching timetable: {str(e)}"
 
+# Define your AP Card Tool
+@mcp.tool()
+def get_ap_card_data(jwt_token: str):
+    """
+    Fetches student AP Card details and transaction history.
+    Args:
+        jwt_token: The student's Bearer JWT from APSpace.
+    """
+    token = jwt_token or APSPACE_JWT_TOKEN
+
+    url = "https://api.apiit.edu.my/apcard/"
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    response = requests.get(url, headers=headers)
+    return response.json()
+
+#Define your AP Card Balance Tool
+@mcp.tool()
+def get_ap_card_balance(jwt_token: str):
+    """
+    Fetches student AP Card balance.
+    Args:
+        jwt token: The student's Bearer JWT from Apspace.
+    """
+    token = jwt_token or APSPACE_JWT_TOKEN
+
+    url = "https://api.apiit.edu.my/apcard/balance"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = requests.get(url, headers=headers)
+    return response.json()
+
+
 if __name__ == "__main__":
     mcp.run()
