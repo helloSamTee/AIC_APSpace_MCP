@@ -10,52 +10,66 @@ mcp = FastMCP("APSpace")
 
 # Tools
 @mcp.tool()
-def get_student_timetable(intake_code: str) -> str:
-    """Tool to Retrieve the weekly timetable for specific intake code"""
+def get_student_timetable(intake_code: str) -> dict:
+    """
+    Retrieve the weekly timetable for a specific intake.
+
+    Args:
+        intake_code: Intake code such as APD2F2506CS(AI)
+
+    Returns:
+        A dictionary with status and timetable data.
+    """
 
     STUDENTS_TIMETABLE_URL = "https://s3-ap-southeast-1.amazonaws.com/open-ws/weektimetable"
 
     try:
         response = requests.get(STUDENTS_TIMETABLE_URL)
-        logging.info('GET request to fetch student timetable')
-        
-        response.raise_for_status()
-        all_timetable = response.json()
-        logging.info('Timetable retrieved successfully')
+        # response.raise_for_status()
 
-        # filter the timetable
+        all_timetable = response.json()
+
+
         filtered_timetable = [
-            x for x in all_timetable 
-            if x.get("INTAKE_CODE") == intake_code
+            x for x in all_timetable
+            if x.get("INTAKE") == intake_code
         ]
 
         if not filtered_timetable:
-            return f"No classes found for intake: {intake_code}."
+            return {
+                "status": "not_found",
+                "message": f"No classes found for intake {intake_code}",
+                "timetable": []
+            }
 
-        formated_timetable = []
-        for module in filtered_timetable:
-            formated_timetable.append(
-                {
-                    "module": module.get("MODID"),
-                    "group": module.get("GROUPING"),
-                    "day": module.get("DAY"),
-                    "date": module.get("DATESTAMP"),
-                    "from": module.get("TIME_FROM"),
-                    "to": module.get("TIME_TO"),
-                    "location": module.get("LOCATION"),
-                    "room": module.get("ROOM"),
-                    "lecturer": module.get("NAME")
-                }
-            )
+        formatted_timetable = [
+            {
+                "module": x.get("MODID"),
+                "group": x.get("GROUPING"),
+                "day": x.get("DAY"),
+                "date": x.get("DATESTAMP"),
+                "from": x.get("TIME_FROM"),
+                "to": x.get("TIME_TO"),
+                "location": x.get("LOCATION"),
+                "room": x.get("ROOM"),
+                "lecturer": x.get("NAME"),
+            }
+            for x in filtered_timetable
+        ]
 
-        return json.dumps(formated_timetable[:20])  # change the size of the list
+        return {
+            "status": "ok",
+            "count": len(formatted_timetable),
+            "timetable": formatted_timetable[:23],
+        }
 
     except Exception as e:
-        logging.error('Error fetching timetable: {str(e)}')
-        
-        return f"Error fetching timetable: {str(e)}"
+        return {
+            "status": "error",
+            "message": str(e),
+            "timetable": []
+        }
     
-
     
 @mcp.tool()
 async def sign_attendance(jwt_token: str, ctx: Context) -> str:
