@@ -1,4 +1,4 @@
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Context
 import requests
 import json
 import logging
@@ -7,7 +7,6 @@ from attendance import brute_force_attendance
 
 logging.basicConfig(level=logging.INFO)
 
-env_token = os.getenv("BEARER_TOKEN")
 # Server intialization
 mcp = FastMCP("APSpace")
 
@@ -75,7 +74,7 @@ def get_staff(jwt_token: str=None, staff_name: str=None, staff_email: str=None) 
         (department, email, extension, office location, etc.).
     """
 
-    token = jwt_token if jwt_token else env_token
+    token = jwt_token
 
     url = "https://api.apiit.edu.my/apcard/"
     headers = {"Authorization": f"Bearer {token}"}
@@ -150,7 +149,7 @@ def get_lecturer_timetable(jwt_token: str=None, staff_name: str=None, staff_emai
         A JSON response containing the lecturer's weekly schedule, including module names, 
         times, and classroom locations.
     """
-    token = jwt_token if jwt_token else env_token
+    token = jwt_token
     staff_info = get_staff(token, staff_name, staff_email)
     
     if staff_info.get("status") != "ok":
@@ -181,7 +180,7 @@ def get_ap_card_data(jwt_token: str=None):
     Args:
         jwt_token: The student's Bearer JWT from APSpace.
     """
-    token = jwt_token if jwt_token else env_token
+    token = jwt_token
 
     url = "https://api.apiit.edu.my/apcard/"
     headers = {"Authorization": f"Bearer {token}"}
@@ -197,7 +196,7 @@ def get_ap_card_balance(jwt_token: str=None):
     Args:
         jwt token: The student's Bearer JWT from Apspace.
     """
-    token = jwt_token if jwt_token else env_token
+    token = jwt_token
 
     url = "https://api.apiit.edu.my/apcard/balance"
     headers = {"Authorization": f"Bearer {token}"}
@@ -212,7 +211,7 @@ def get_my_courses(jwt_token: str=None):
     Args:
         jwt_token: The student's Bearer JWT from APSpace.
     """
-    token = jwt_token if jwt_token else env_token
+    token = jwt_token
 
     url = "https://api.apiit.edu.my/student/courses"
     headers = {"Authorization": f"Bearer {token}"}
@@ -229,17 +228,17 @@ def get_my_courses(jwt_token: str=None):
 
 
 @mcp.tool()
-def get_my_attendance(intake: str, jwt_token: str=None):
+def get_my_attendance(jwt_token: str=None, intake: str=None):
     """
     Fetches attendance records for a given intake.
     Args:
         jwt_token: The student's Bearer JWT from APSpace.
         intake: Intake code (e.g. APU2F2506CS(AI))
     """
-    token = jwt_token if jwt_token else env_token
+    token = jwt_token
 
     if not intake:
-        return "Missing intake."
+        return "Error: Missing required parameter 'intake'. Please provide an intake code (e.g. APU2F2506CS(AI))"
 
     url = "https://api.apiit.edu.my/student/attendance"
     headers = {"Authorization": f"Bearer {token}"}

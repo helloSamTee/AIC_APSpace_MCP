@@ -16,96 +16,89 @@ from google.genai import types
 from rich import print
 load_dotenv()
 
-# import msal
-
-# def get_ms_token():
-#     client_id = os.getenv("MS_CLIENT_ID")
-#     tenant_id = os.getenv("MS_TENANT_ID")
-#     authority = f"https://login.microsoftonline.com/{tenant_id}"
-#     # Use the scope required by your specific API
-#     scopes = ["User.Read"] 
-
-#     cache = msal.SerializableTokenCache()
-#     cache_path = "token_cache.bin"
-
-#     if os.path.exists(cache_path):
-#         with open(cache_path, "r") as f:
-#             cache.deserialize(f.read())
-
-#     app = msal.PublicClientApplication(client_id, authority=authority, token_cache=cache)
-    
-#     accounts = app.get_accounts()
-#     result = None
-
-#     if accounts:
-#         # Try to get the token silently from cache
-#         result = app.acquire_token_silent(scopes, account=accounts[0])
-
-#     if not result:
-#         # First time login or cache expired: opens browser
-#         result = app.acquire_token_interactive(scopes=scopes)
-#         with open(cache_path, "w") as f:
-#             f.write(cache.serialize())
-
-#     return result.get("access_token")
-
 def get_tools_async():
     """Gets tools from the File System MCP Server."""
-    bearer_token = os.environ["BEARER_TOKEN"]
+    # Load bearer token from environment variable (.env file)
+    bearer_token = os.environ.get("BEARER_TOKEN")
     
-    tools = McpToolset(
+    if not bearer_token:
+        raise ValueError("BEARER_TOKEN not found in environment")
+    
+    # Create MCP toolset connection to the server
+    toolset = McpToolset(
         connection_params=SseServerParams(
             url="http://localhost:3333/sse",
         )
     )
     
-    # Capture the original async get_tools method
-    original_get_tools = tools.get_tools
-
+    # Save reference to the original get_tools method before we modify it
+    original_get_tools = toolset.get_tools
+    
+    # Create a wrapper function that will intercept tool retrieval
     async def wrapped_get_tools(*args, **kwargs):
-        # 1. Get the list of McpTool objects
+        # Get all tools from MCP server (get_ap_card_balance, get_staff, etc.)
         tools = await original_get_tools(*args, **kwargs)
         
+        # Loop through each tool and modify its run_async method
         for tool in tools:
-            # 2. Capture the original run_async method
-            original_run_async = tool.run_async
-
-            # 3. Define the wrapper for the execution logic
-            @functools.wraps(original_run_async)
-            async def wrapped_run_async(args: dict, tool_context):
-                # We inject 'jwt_token' into the arguments dict 
-                # before it's sent to the MCP server
-                args["jwt_token"] = bearer_token
-                
-                return await original_run_async(args=args, tool_context=tool_context)
-
-            # 4. Replace the method on the tool instance
-            tool.run_async = wrapped_run_async
+            # Save the original run_async method for this specific tool
+            original_run = tool.run_async
             
-        return tools
-
-    # Override the instance method
-    tools.get_tools = wrapped_get_tools
+            # Create a new run_async that injects the token automatically
+            # 
+            # WHY WE NEED _orig=original_run and _token=bearer_token:
+            # 
+            # Imagine you have 3 tools: [tool_A, tool_B, tool_C]
+            # 
+            # WITHOUT closure (WRONG WAY):
+            # async def run_with_token(args, tool_context):
+            #     return await original_run(args, tool_context)  # <-- Problem!
+            # 
+            # When tool_A runs later, original_run points to tool_C's function
+            # because the loop already finished and original_run = tool_C.run_async
+            # Result: ALL tools call tool_C's function! ❌
+            # 
+            # WITH closure (CORRECT WAY):
+            # async def run_with_token(args, tool_context, _orig=original_run):
+            #     return await _orig(args, tool_context)  # <-- Fixed!
+            # 
+            # _orig=original_run creates a COPY of the value at THIS moment
+            # tool_A gets _orig=tool_A.run_async
+            # tool_B gets _orig=tool_B.run_async  
+            # tool_C gets _orig=tool_C.run_async
+            # Result: Each tool calls its OWN function! ✅
+            async def run_with_token(args: dict, tool_context, _orig=original_run, _token=bearer_token):
+                # Inject jwt_token into the arguments before sending to MCP server
+                args["jwt_token"] = _token
+                # Call the original function with the modified arguments
+                return await _orig(args=args, tool_context=tool_context)
+            
+            # Replace the tool's run_async with our token-injecting version
+            tool.run_async = run_with_token
         
-    print("MCP Toolset created with automatic token injection.")
-    return tools
+        # Return all modified tools
+        return tools
+    
+    # Replace the toolset's get_tools method with our wrapper
+    toolset.get_tools = wrapped_get_tools
+    return toolset
 
 def get_agent_async():
     """Creates an ADK Agent equipped with tools from the MCP Server."""
     tools = get_tools_async()
-    # print(f"Fetched {len(tools)} tools from MCP server.")
     
     retry_config = types.HttpRetryOptions(
-        attempts=5,  # Maximum retry attempts
-        exp_base=7,  # Delay multiplier
+        attempts=5,
+        exp_base=7,
         initial_delay=1,
-        http_status_codes=[429, 500, 503, 504],  # Retry on these HTTP errors
+        http_status_codes=[429, 500, 503, 504],
     )
     
     root_agent = LlmAgent(
         model=Gemini(model="gemini-2.0-flash-lite", retry_options=retry_config),
         name="APSpaceAgent",
         tools=[tools],
+        instruction="You are APSpace Assistant. IMPORTANT: The jwt_token/bearer token is automatically provided for all API calls - NEVER ask the user for it. When calling any tool that requires authentication, simply call it without mentioning the token."
     )
     return root_agent
 
