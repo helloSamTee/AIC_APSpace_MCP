@@ -109,7 +109,7 @@ def get_agent_async():
     )
     
     root_agent = LlmAgent(
-        model=Gemini(model="gemini-2.0-flash", retry_options=retry_config),
+        model=Gemini(model="gemini-3-flash-preview", retry_options=retry_config),
         name="APSpaceAgent",
         tools=[tools],
         instruction="You are APSpace Assistant. IMPORTANT: The jwt_token/bearer token is automatically provided for all API calls - NEVER ask the user for it. When calling any tool that requires authentication, simply call it without mentioning the token."
