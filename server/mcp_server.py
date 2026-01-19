@@ -12,45 +12,52 @@ mcp = FastMCP("APSpace")
 
 # Tools
 @mcp.tool()
-def get_student_timetable(intake_code: str) -> str:
-    """Retrieves the weekly timetable for a specific intake code."""
+def get_student_timetable(jwt_token: str, intake_code: str=None) -> dict:
+    """Retrieves the weekly timetable for a specific intake code. If intake code not given, call get_my_courses to get the student's latest intake code."""
     
-    timetable_url = "https://s3-ap-southeast-1.amazonaws.com/open-ws/weektimetable"
+    intake_code = _fetch_courses_logic(jwt_token)[0].get("INTAKE_CODE") if not intake_code else intake_code
+    
+    STUDENTS_TIMETABLE_URL = "https://s3-ap-southeast-1.amazonaws.com/open-ws/weektimetable"
 
     try:
-        response = requests.get(timetable_url)
-        logging.info('GET request to fetch student timetable')
-        
-        response.raise_for_status()
-        all_timetable = response.json()
-        logging.info('Timetable retrieved successfully')
+        response = requests.get(STUDENTS_TIMETABLE_URL)
+        # response.raise_for_status()
 
-        # filter the timetable
+        all_timetable = response.json()
+
+
         filtered_timetable = [
-            x for x in all_timetable 
-            if x.get("INTAKE_CODE") == intake_code
+            x for x in all_timetable
+            if x.get("INTAKE") == intake_code
         ]
 
         if not filtered_timetable:
-            return f"No classes found for intake: {intake_code}."
+            return {
+                "status": "not_found",
+                "message": f"No classes found for intake {intake_code}",
+                "timetable": []
+            }
 
-        # Format the filtered timetable
-        formatted_schedule = []
-        for module in filtered_timetable:
-            formatted_schedule.append(
-                {
-                    "module": module.get("MODID"),
-                    "group": module.get("GROUPING"),
-                    "day": module.get("DAY"),
-                    "date": module.get("DATESTAMP"),
-                    "from": module.get("TIME_FROM"),
-                    "to": module.get("TIME_TO"),
-                    "location": module.get("LOCATION"),
-                    "lecturer": module.get("SAMACCOUNTNAME")
-                }
-            )
-        
-        return json.dumps(formatted_schedule[:20]) 
+        formatted_timetable = [
+            {
+                "module": x.get("MODID"),
+                "group": x.get("GROUPING"),
+                "day": x.get("DAY"),
+                "date": x.get("DATESTAMP"),
+                "from": x.get("TIME_FROM"),
+                "to": x.get("TIME_TO"),
+                "location": x.get("LOCATION"),
+                "room": x.get("ROOM"),
+                "lecturer": x.get("NAME"),
+            }
+            for x in filtered_timetable
+        ]
+
+        return {
+            "status": "ok",
+            "count": len(formatted_timetable),
+            "timetable": formatted_timetable[:23],
+        }
 
     except Exception as e:
         return {
@@ -59,25 +66,9 @@ def get_student_timetable(intake_code: str) -> str:
             "timetable": []
         }
         
-@mcp.tool()
-def get_staff(jwt_token: str=None, staff_name: str=None, staff_email: str=None) -> dict:
-    """
-    Search for staff members or retrieve a list of staff in the university directory.
-
-    Args:
-        jwt_token: The student's Bearer JWT for authentication. (Handled automatically).
-        staff_name: The full name of the staff member to search for.
-        staff_email: The official email address of the staff member to search for.
-
-    Returns:
-        A dictionary containing the status of the request and a list of staff details 
-        (department, email, extension, office location, etc.).
-    """
-
-    token = jwt_token
-
-    url = "https://api.apiit.edu.my/apcard/"
-    headers = {"Authorization": f"Bearer {token}"}
+def _fetch_staff_logic(jwt_token: str, staff_name: str="", staff_email: str="") -> dict:
+    url = "https://api.apiit.edu.my/staff/listing"
+    headers = {"Authorization": f"Bearer {jwt_token}"}
     
     try:
         response = requests.get(url, headers=headers)
@@ -85,12 +76,28 @@ def get_staff(jwt_token: str=None, staff_name: str=None, staff_email: str=None) 
 
         all_staff = response.json()
 
-        if staff_name:
+        if staff_name or staff_email:
             filtered_staff = [
-                x for x in all_staff
-                if (x.get("FULLNAME") == staff_name) 
-                or (x.get("STAFFEMAIL") == staff_email)
-                or (x.get("EMAIL") == staff_email)
+                {
+                "code": x.get("CODE"),
+                "department": x.get("DEPARTMENT"),
+                "department2": x.get("DEPARTMENT2"),
+                "department3": x.get("DEPARTMENT3"),
+                "did": x.get("DID"),
+                "email": x.get("EMAIL"),
+                "extension": x.get("EXTENSION"),
+                "fullname": x.get("FULLNAME"),
+                "id": x.get("ID"),
+                "location": x.get("LOCATION"),
+                "photo": x.get("PHOTO"),
+                "refno": x.get("RefNo"),
+                "staffemail": x.get("STAFFEMAIL"),
+                "title": x.get("TITLE")
+                }   
+                for x in all_staff
+                if (x.get("FULLNAME").lower() == staff_name.lower()) 
+                or (x.get("STAFFEMAIL") == staff_email.lower())
+                or (x.get("EMAIL") == staff_email.lower())
             ]
             
             if not filtered_staff:
@@ -134,9 +141,26 @@ def get_staff(jwt_token: str=None, staff_name: str=None, staff_email: str=None) 
             "message": str(e),
             "timetable": []
         }
+
+@mcp.tool()
+def get_staff(jwt_token: str, staff_name: str="", staff_email: str="") -> dict:
+    """
+    Search for staff members or retrieve a list of staff in the university directory.
+
+    Args:
+        jwt_token: The student's Bearer JWT for authentication. (Handled automatically).
+        staff_name: The full name of the staff member to search for.
+        staff_email: The official email address of the staff member to search for.
+
+    Returns:
+        A dictionary containing the status of the request and a list of staff details 
+        (department, email, extension, office location, etc.).
+    """
+    return _fetch_staff_logic(jwt_token, staff_name, staff_email)
+    
         
 @mcp.tool()
-def get_lecturer_timetable(jwt_token: str=None, staff_name: str=None, staff_email: str=None):
+def get_lecturer_timetable(jwt_token: str, staff_name: str="", staff_email: str="") -> dict:
     """
     Fetch the teaching schedule/timetable for a specific lecturer or staff member.
 
@@ -149,13 +173,12 @@ def get_lecturer_timetable(jwt_token: str=None, staff_name: str=None, staff_emai
         A JSON response containing the lecturer's weekly schedule, including module names, 
         times, and classroom locations.
     """
-    token = jwt_token
-    staff_info = get_staff(token, staff_name, staff_email)
+    staff_info = _fetch_staff_logic(jwt_token, staff_name, staff_email)
     
     if staff_info.get("status") != "ok":
         return staff_info
     
-    staff_id = staff_info[0]['id']
+    staff_id = staff_info["staff"][0]["id"]
 
     url = f"https://api.apiit.edu.my/lecturer-timetable/v2/{staff_id}"
     # headers = {"Authorization": f"Bearer {token}"}
@@ -164,7 +187,7 @@ def get_lecturer_timetable(jwt_token: str=None, staff_name: str=None, staff_emai
     return response.json()
     
 @mcp.tool()
-async def sign_attendance(ctx: Context, jwt_token: str=None) -> str:
+async def sign_attendance(ctx: Context, jwt_token: str) -> str:
     """
     Signs attendance by automatically finding the correct 3-digit OTP.
     Args:
@@ -174,47 +197,44 @@ async def sign_attendance(ctx: Context, jwt_token: str=None) -> str:
 
 # Define your AP Card Tool
 @mcp.tool()
-def get_ap_card_data(jwt_token: str=None):
+def get_ap_card_data(jwt_token: str) -> dict:
     """
     Fetches student AP Card details and transaction history.
     Args:
         jwt_token: The student's Bearer JWT from APSpace.
     """
-    token = jwt_token
-
     url = "https://api.apiit.edu.my/apcard/"
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {jwt_token}"}
     
     response = requests.get(url, headers=headers)
     return response.json()
 
 #Define your AP Card Balance Tool
 @mcp.tool()
-def get_ap_card_balance(jwt_token: str=None):
+def get_ap_card_balance(jwt_token: str) -> dict:
     """
     Fetches student AP Card balance.
     Args:
         jwt token: The student's Bearer JWT from Apspace.
     """
-    token = jwt_token
-
     url = "https://api.apiit.edu.my/apcard/balance"
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {jwt_token}"}
 
     response = requests.get(url, headers=headers)
     return response.json()
 
 @mcp.tool()
-def get_my_courses(jwt_token: str=None):
+def get_my_courses(jwt_token: str) -> dict:
     """
     Fetches all courses the student is enrolled in.
     Args:
         jwt_token: The student's Bearer JWT from APSpace.
     """
-    token = jwt_token
+    return _fetch_courses_logic(jwt_token)
 
+def _fetch_courses_logic(jwt_token: str) -> dict:
     url = "https://api.apiit.edu.my/student/courses"
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {jwt_token}"}
 
     response = requests.get(url, headers=headers, timeout=15)
 
@@ -228,20 +248,18 @@ def get_my_courses(jwt_token: str=None):
 
 
 @mcp.tool()
-def get_my_attendance(jwt_token: str=None, intake: str=None):
+def get_my_attendance(jwt_token: str, intake: str=None) -> dict:
     """
     Fetches attendance records for a given intake.
     Args:
         jwt_token: The student's Bearer JWT from APSpace.
         intake: Intake code (e.g. APU2F2506CS(AI))
     """
-    token = jwt_token
-
     if not intake:
         return "Error: Missing required parameter 'intake'. Please provide an intake code (e.g. APU2F2506CS(AI))"
 
     url = "https://api.apiit.edu.my/student/attendance"
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {jwt_token}"}
     params = {"intake": intake}
 
     response = requests.get(url, headers=headers, params=params, timeout=15)

@@ -1,23 +1,36 @@
 # File agent.py
-import functools
 import os
+import msal
 from dotenv import load_dotenv
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.artifacts.in_memory_artifact_service import (
-    InMemoryArtifactService,  # Optional
-)
 from google.adk.models.google_llm import Gemini
-
-from google.adk.tools.mcp_tool.mcp_toolset import (
-    McpToolset,
-)
+from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import SseServerParams
 from google.genai import types
-from rich import print
+
 load_dotenv()
+
+# --- AUTH LOGIC ---
+def get_ms_token():
+    client_id = os.getenv("MS_CLIENT_ID")
+    tenant_id = os.getenv("MS_TENANT_ID")
+    
+    if not (client_id and tenant_id):
+        raise ValueError("MS_CLIENT_ID and MS_TENANT_ID not found in environment")
+    
+    authority = f"https://login.microsoftonline.com/{tenant_id}"
+    scopes = ["User.Read"] # Adjust based on APSpace requirements
+
+    app = msal.PublicClientApplication(client_id, authority=authority)
+    # This will open a browser for you to log in the first time
+    result = app.acquire_token_interactive(scopes=scopes)
+    return result.get("access_token")
 
 def get_tools_async():
     """Gets tools from the File System MCP Server."""
+    # Get the real token
+    # bearer_token = get_ms_token()
+    
     # Load bearer token from environment variable (.env file)
     bearer_token = os.environ.get("BEARER_TOKEN")
     
@@ -69,6 +82,7 @@ def get_tools_async():
             # Result: Each tool calls its OWN function! ✅
             async def run_with_token(args: dict, tool_context, _orig=original_run, _token=bearer_token):
                 # Inject jwt_token into the arguments before sending to MCP server
+                # if "jwt_token" in args:
                 args["jwt_token"] = _token
                 # Call the original function with the modified arguments
                 return await _orig(args=args, tool_context=tool_context)
@@ -88,14 +102,14 @@ def get_agent_async():
     tools = get_tools_async()
     
     retry_config = types.HttpRetryOptions(
-        attempts=5,
-        exp_base=7,
+        attempts=5,  # Maximum retry attempts
+        exp_base=7,  # Delay multiplier
         initial_delay=1,
-        http_status_codes=[429, 500, 503, 504],
+        http_status_codes=[429, 500, 503, 504], # Retry on these HTTP errors
     )
     
     root_agent = LlmAgent(
-        model=Gemini(model="gemini-2.0-flash-lite", retry_options=retry_config),
+        model=Gemini(model="gemini-2.0-flash", retry_options=retry_config),
         name="APSpaceAgent",
         tools=[tools],
         instruction="You are APSpace Assistant. IMPORTANT: The jwt_token/bearer token is automatically provided for all API calls - NEVER ask the user for it. When calling any tool that requires authentication, simply call it without mentioning the token."
